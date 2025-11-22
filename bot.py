@@ -75,9 +75,10 @@ def extract_report_date(text: str):
     """
     Tìm ngày trong nội dung báo cáo dạng:
     'Ngày 22/11/2025' -> trả về đối tượng date
+    Cho phép 1 hoặc nhiều dấu '/'
     Nếu không tìm được hoặc sai format -> trả về None
     """
-    m = re.search(r"Ngày\s+(\d{1,2})/(\d{1,2})/(\d{4})", text)
+    m = re.search(r"Ngày\s+(\d{1,2})/+(\d{1,2})/+(\d{4})", text)
     if not m:
         return None
     d, mth, y = map(int, m.groups())
@@ -92,6 +93,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✅ Bot báo cáo kho Giao Hàng Nặng đang chạy.\n"
         "Cú pháp báo cáo:\n"
         "Dòng 1: ID_KHO  - Tên kho\n"
+        "Dòng 2: Ngày dd/mm/yyyy\n"
         "Sau đó là 4 mục 1,2,3,4 giống template."
     )
 
@@ -132,15 +134,30 @@ async def report_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # 5. Lấy ngày báo cáo trong nội dung (nếu có), nếu không thì dùng ngày hôm nay
+    # 5. Lấy ngày báo cáo trong nội dung & so với ngày hiện tại
+    now = datetime.now(TIMEZONE)
+    today = now.date()
     report_date = extract_report_date(text)
-    if report_date is None:
-        # fallback: dùng ngày hiện tại theo timezone
-        now = datetime.now(TIMEZONE)
-        report_date = now.date()
 
-    date_key = report_date.isoformat()              # dùng làm key trong reported_by_date
-    date_label = report_date.strftime("%d/%m/%Y")   # hiển thị cho người dùng
+    if report_date is None:
+        await update.message.reply_text(
+            "⚠️ Không tìm thấy dòng 'Ngày dd/mm/yyyy' trong báo cáo.\n"
+            "Vui lòng bổ sung hoặc ghi đúng định dạng."
+        )
+        return
+
+    if report_date != today:
+        await update.message.reply_text(
+            "⚠️ Ngày báo cáo không đúng ngày hiện tại.\n"
+            f"- Trong báo cáo: {report_date.strftime('%d/%m/%Y')}\n"
+            f"- Hôm nay: {today.strftime('%d/%m/%Y')}\n"
+            "Vui lòng chỉnh lại ngày báo cáo cho đúng rồi gửi lại."
+        )
+        return
+
+    # 6. Ghi nhận kho đã báo cáo cho ngày hôm nay
+    date_key = today.isoformat()
+    date_label = today.strftime("%d/%m/%Y")
 
     if date_key not in reported_by_date:
         reported_by_date[date_key] = set()
