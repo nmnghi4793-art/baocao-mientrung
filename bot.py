@@ -26,6 +26,7 @@ WAREHOUSES: dict[str, str] = {}
 
 def load_warehouses() -> dict[str, str]:
     warehouses: dict[str, str] = {}
+    # dùng utf-8-sig để xử lý BOM
     with open(WAREHOUSE_FILE, encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         for row in reader:
@@ -59,7 +60,7 @@ def extract_kho_from_text(text: str):
 def has_sections_1_to_4(text: str) -> bool:
     """
     Kiểm tra trong nội dung có đủ 4 mục bắt đầu bằng:
-    1. , 2. , 3. , 4. (hoặc 1) 2) ...)
+    1. , 2. , 3. , 4. (hoặc 1) 2) ... )
     """
     found = set()
     for line in text.splitlines():
@@ -68,6 +69,22 @@ def has_sections_1_to_4(text: str) -> bool:
         if m:
             found.add(m.group(1))
     return all(str(i) in found for i in range(1, 5))
+
+
+def extract_report_date(text: str):
+    """
+    Tìm ngày trong nội dung báo cáo dạng:
+    'Ngày 22/11/2025' -> trả về đối tượng date
+    Nếu không tìm được hoặc sai format -> trả về None
+    """
+    m = re.search(r"Ngày\s+(\d{1,2})/(\d{1,2})/(\d{4})", text)
+    if not m:
+        return None
+    d, mth, y = map(int, m.groups())
+    try:
+        return datetime(y, mth, d).date()
+    except ValueError:
+        return None
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -115,16 +132,22 @@ async def report_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # 5. Ghi nhận kho đã báo cáo cho ngày hôm nay
-    now = datetime.now(TIMEZONE)
-    today_key = now.date().isoformat()  # VD: "2025-11-23"
+    # 5. Lấy ngày báo cáo trong nội dung (nếu có), nếu không thì dùng ngày hôm nay
+    report_date = extract_report_date(text)
+    if report_date is None:
+        # fallback: dùng ngày hiện tại theo timezone
+        now = datetime.now(TIMEZONE)
+        report_date = now.date()
 
-    if today_key not in reported_by_date:
-        reported_by_date[today_key] = set()
-    reported_by_date[today_key].add(id_kho)
+    date_key = report_date.isoformat()              # dùng làm key trong reported_by_date
+    date_label = report_date.strftime("%d/%m/%Y")   # hiển thị cho người dùng
+
+    if date_key not in reported_by_date:
+        reported_by_date[date_key] = set()
+    reported_by_date[date_key].add(id_kho)
 
     await update.message.reply_text(
-        f"✅ ĐÃ GHI NHẬN báo cáo ngày {now.strftime('%d/%m/%Y')} của:\n"
+        f"✅ ĐÃ GHI NHẬN báo cáo ngày {date_label} của:\n"
         f"{id_kho} - {ten_kho_system}"
     )
 
