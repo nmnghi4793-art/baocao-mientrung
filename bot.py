@@ -26,7 +26,7 @@ WAREHOUSES: dict[str, str] = {}
 
 def load_warehouses() -> dict[str, str]:
     warehouses: dict[str, str] = {}
-    with open(WAREHOUSE_FILE, encoding="utf-8") as f:
+    with open(WAREHOUSE_FILE, encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         for row in reader:
             id_kho = str(row["id_kho"]).strip()
