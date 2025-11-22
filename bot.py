@@ -23,10 +23,17 @@ reported_by_date: dict[str, set[str]] = {}
 # Lưu danh sách kho: {"21163000": "Kho Giao Hàng Nặng Ninh Thuận", ...}
 WAREHOUSES: dict[str, str] = {}
 
+# Lưu trạng thái tổng kết 15h xem đã đủ chưa
+summary_15_done: bool = False
+last_summary_date: str | None = None
+
 
 def load_warehouses() -> dict[str, str]:
+    """
+    Đọc file warehouses.csv, xử lý BOM bằng utf-8-sig.
+    File cần có 2 cột: id_kho, ten_kho
+    """
     warehouses: dict[str, str] = {}
-    # dùng utf-8-sig để xử lý BOM
     with open(WAREHOUSE_FILE, encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         for row in reader:
@@ -74,8 +81,8 @@ def has_sections_1_to_4(text: str) -> bool:
 def extract_report_date(text: str):
     """
     Tìm ngày trong nội dung báo cáo dạng:
-    'Ngày 22/11/2025' -> trả về đối tượng date
-    Cho phép 1 hoặc nhiều dấu '/'
+    'Ngày 22/11/2025' hoặc 'Ngày 22//11/2025'
+    -> trả về đối tượng date
     Nếu không tìm được hoặc sai format -> trả về None
     """
     m = re.search(r"Ngày\s+(\d{1,2})/+(\d{1,2})/+(\d{4})", text)
@@ -169,31 +176,82 @@ async def report_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def daily_summary(context: ContextTypes.DEFAULT_TYPE):
+async def send_daily_summary(context: ContextTypes.DEFAULT_TYPE, check_time: str):
+    """
+    check_time = "15" hoặc "16"
+    - 15h00: luôn gửi tổng kết.
+    - 16h00: chỉ gửi nếu 15h00 còn thiếu kho.
+    """
+    global summary_15_done, last_summary_date
+
     now = datetime.now(TIMEZONE)
     today_key = now.date().isoformat()
+    date_label = now.strftime("%d/%m/%Y")
+
+    # Nếu sang ngày mới thì reset trạng thái 15h
+    if last_summary_date != today_key:
+        summary_15_done = False
+        last_summary_date = today_key
 
     all_ids = set(WAREHOUSES.keys())
     done_ids = reported_by_date.get(today_key, set())
     missing_ids = sorted(all_ids - done_ids)
 
-    if not missing_ids:
-        text = (
-            f"✅ {now.strftime('%d/%m/%Y')} - TẤT CẢ "
-            f"{len(all_ids)} kho đã gửi báo cáo trước 15h00."
-        )
-    else:
-        lines = [
-            f"❌ Đến 15h00 ngày {now.strftime('%d/%m/%Y')}, "
-            f"còn {len(missing_ids)} kho CHƯA gửi báo cáo:"
-        ]
-        for id_kho in missing_ids:
-            ten_kho = WAREHOUSES.get(id_kho, "")
-            lines.append(f"- {id_kho} - {ten_kho}")
-        text = "\n".join(lines)
+    # ======= LOGIC 15H00 =======
+    if check_time == "15":
+        if not missing_ids:
+            summary_15_done = True  # Đã đủ, 16h không cần gửi
+            text = (
+                f"Tổng kết ngày {date_label} : "
+                f"Tất cả các kho đã gửi báo cáo trong ngày"
+            )
+        else:
+            summary_15_done = False  # Còn thiếu, 16h sẽ kiểm tra lại
+            lines = [
+                f"Tổng kết ngày {date_label} : còn {len(missing_ids)} "
+                f"kho chưa gởi báo cáo trong ngày :"
+            ]
+            for id_kho in missing_ids:
+                ten_kho = WAREHOUSES.get(id_kho, "")
+                lines.append(f"- {id_kho} - {ten_kho}")
+            text = "\n".join(lines)
 
-    summary_chat_id = int(os.environ["SUMMARY_CHAT_ID"])
-    await context.bot.send_message(chat_id=summary_chat_id, text=text)
+        summary_chat_id = int(os.environ["SUMMARY_CHAT_ID"])
+        await context.bot.send_message(chat_id=summary_chat_id, text=text)
+        return
+
+    # ======= LOGIC 16H00 =======
+    if check_time == "16":
+        # Nếu 15h đã đủ thì thôi, không gửi nữa
+        if summary_15_done:
+            return
+
+        # 15h còn thiếu -> 16h kiểm tra lại lần 2
+        if not missing_ids:
+            text = (
+                f"Tổng kết ngày {date_label} : "
+                f"Tất cả các kho đã gửi báo cáo trong ngày"
+            )
+        else:
+            lines = [
+                f"Tổng kết ngày {date_label} : còn {len(missing_ids)} "
+                f"kho chưa gởi báo cáo trong ngày :"
+            ]
+            for id_kho in missing_ids:
+                ten_kho = WAREHOUSES.get(id_kho, "")
+                lines.append(f"- {id_kho} - {ten_kho}")
+            text = "\n".join(lines)
+
+        summary_chat_id = int(os.environ["SUMMARY_CHAT_ID"])
+        await context.bot.send_message(chat_id=summary_chat_id, text=text)
+
+
+async def daily_summary_15(context: ContextTypes.DEFAULT_TYPE):
+    await send_daily_summary(context, check_time="15")
+
+
+async def daily_summary_16(context: ContextTypes.DEFAULT_TYPE):
+    await send_daily_summary(context, check_time="16")
 
 
 def main():
@@ -214,12 +272,17 @@ def main():
         MessageHandler(filters.TEXT & ~filters.COMMAND, report_handler)
     )
 
-    # Job tổng hợp 15h00 hàng ngày
+    # Job tổng hợp 15h00 & 16h00 hàng ngày
     job_queue = application.job_queue
     job_queue.run_daily(
-        daily_summary,
+        daily_summary_15,
         time=time(hour=15, minute=0, tzinfo=TIMEZONE),
-        name="daily_summary",
+        name="daily_summary_15",
+    )
+    job_queue.run_daily(
+        daily_summary_16,
+        time=time(hour=16, minute=0, tzinfo=TIMEZONE),
+        name="daily_summary_16",
     )
 
     application.run_polling()
