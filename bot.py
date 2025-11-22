@@ -6,11 +6,11 @@ from zoneinfo import ZoneInfo
 
 from telegram import Update
 from telegram.ext import (
-    ApplicationBuilder,
-    ContextTypes,
+    Updater,
     CommandHandler,
     MessageHandler,
-    filters,
+    Filters,
+    CallbackContext,
 )
 
 # ===== CẤU HÌNH CƠ BẢN =====
@@ -18,14 +18,14 @@ TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
 WAREHOUSE_FILE = "warehouses.csv"
 
 # Lưu: { "YYYY-MM-DD": set(["21163000", "21095000", ...]) }
-reported_by_date: dict[str, set[str]] = {}
+reported_by_date = {}  # type: dict[str, set[str]]
 
-# Lưu danh sách kho: {"21163000": "Kho Giao Hàng Nặng Ninh Thuận", ...}
-WAREHOUSES: dict[str, str] = {}
+# Lưu danh sách kho: { "21163000": "Kho Giao Hàng Nặng Ninh Thuận", ... }
+WAREHOUSES = {}  # type: dict[str, str]
 
 
-def load_warehouses() -> dict[str, str]:
-    warehouses: dict[str, str] = {}
+def load_warehouses():
+    warehouses = {}
     with open(WAREHOUSE_FILE, encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
@@ -59,8 +59,8 @@ def has_sections_1_to_4(text: str) -> bool:
     return all(str(i) in found for i in range(1, 5))
 
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
+def start(update: Update, context: CallbackContext):
+    update.message.reply_text(
         "✅ Bot báo cáo kho Giao Hàng Nặng đang chạy.\n"
         "Cú pháp báo cáo:\n"
         "Dòng 1: ID_KHO  - Tên kho\n"
@@ -68,7 +68,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def report_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def report_handler(update: Update, context: CallbackContext):
     if not update.message or not update.message.text:
         return
 
@@ -80,22 +80,23 @@ async def report_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     ten_kho_system = WAREHOUSES.get(id_kho)
     if not ten_kho_system:
-        await update.message.reply_text(
-            f"⚠️ ID kho {id_kho} chưa có trong danh sách, vui lòng kiểm tra lại."
+        update.message.reply_text(
+            "⚠️ ID kho {} chưa có trong danh sách, vui lòng kiểm tra lại.".format(
+                id_kho
+            )
         )
         return
 
     if ten_kho_msg.lower().strip() != ten_kho_system.lower().strip():
-        await update.message.reply_text(
+        update.message.reply_text(
             "⚠️ Tên kho không khớp với danh sách.\n"
-            f"Trong file là: {id_kho} - {ten_kho_system}"
+            "Trong file là: {} - {}".format(id_kho, ten_kho_system)
         )
         return
 
     if not has_sections_1_to_4(text):
-        await update.message.reply_text(
-            "⚠️ Báo cáo chưa đủ 4 mục (1, 2, 3, 4). "
-            "Vui lòng kiểm tra lại cú pháp."
+        update.message.reply_text(
+            "⚠️ Báo cáo chưa đủ 4 mục (1, 2, 3, 4). Vui lòng kiểm tra lại cú pháp."
         )
         return
 
@@ -106,13 +107,14 @@ async def report_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reported_by_date[today_key] = set()
     reported_by_date[today_key].add(id_kho)
 
-    await update.message.reply_text(
-        f"✅ ĐÃ GHI NHẬN báo cáo ngày {now.strftime('%d/%m/%Y')} của:\n"
-        f"{id_kho} - {ten_kho_system}"
+    update.message.reply_text(
+        "✅ ĐÃ GHI NHẬN báo cáo ngày {} của:\n{} - {}".format(
+            now.strftime("%d/%m/%Y"), id_kho, ten_kho_system
+        )
     )
 
 
-async def daily_summary(context: ContextTypes.DEFAULT_TYPE):
+def daily_summary(context: CallbackContext):
     now = datetime.now(TIMEZONE)
     today_key = now.date().isoformat()
 
@@ -122,46 +124,48 @@ async def daily_summary(context: ContextTypes.DEFAULT_TYPE):
 
     if not missing_ids:
         text = (
-            f"✅ {now.strftime('%d/%m/%Y')} - TẤT CẢ "
-            f"{len(all_ids)} kho đã gửi báo cáo trước 15h00."
+            "✅ {} - TẤT CẢ {} kho đã gửi báo cáo trước 15h00.".format(
+                now.strftime("%d/%m/%Y"), len(all_ids)
+            )
         )
     else:
         lines = [
-            f"❌ Đến 15h00 ngày {now.strftime('%d/%m/%Y')}, "
-            f"còn {len(missing_ids)} kho CHƯA gửi báo cáo:"
+            "❌ Đến 15h00 ngày {}, còn {} kho CHƯA gửi báo cáo:".format(
+                now.strftime("%d/%m/%Y"), len(missing_ids)
+            )
         ]
         for id_kho in missing_ids:
             ten_kho = WAREHOUSES.get(id_kho, "")
-            lines.append(f"- {id_kho} - {ten_kho}")
+            lines.append("- {} - {}".format(id_kho, ten_kho))
         text = "\n".join(lines)
 
     summary_chat_id = int(os.environ["SUMMARY_CHAT_ID"])
-    await context.bot.send_message(chat_id=summary_chat_id, text=text)
+    context.bot.send_message(chat_id=summary_chat_id, text=text)
 
 
 def main():
     global WAREHOUSES
-    WAREHOUSES = load_warehouses()
+    WAREHOUSES.update(load_warehouses())
 
     token = os.environ.get("BOT_TOKEN")
     if not token:
         raise RuntimeError("Chưa cấu hình biến môi trường BOT_TOKEN")
 
-    application = ApplicationBuilder().token(token).build()
+    updater = Updater(token, use_context=True)
+    dp = updater.dispatcher
 
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, report_handler)
-    )
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, report_handler))
 
-    job_queue = application.job_queue
+    job_queue = updater.job_queue
     job_queue.run_daily(
         daily_summary,
         time=time(hour=15, minute=0, tzinfo=TIMEZONE),
         name="daily_summary",
     )
 
-    application.run_polling()
+    updater.start_polling()
+    updater.idle()
 
 
 if __name__ == "__main__":
