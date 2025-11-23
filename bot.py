@@ -216,9 +216,17 @@ async def send_daily_summary(context: ContextTypes.DEFAULT_TYPE, check_time: str
             lines.append("\n👤 CC anh @nghinm")
             text = "\n".join(lines)
 
-        summary_chat_id = int(os.environ["SUMMARY_CHAT_ID"])
-        await context.bot.send_message(chat_id=summary_chat_id, text=text)
-        return
+chat_ids_raw = os.environ.get("SUMMARY_CHAT_ID", "")
+chat_ids = [cid.strip() for cid in chat_ids_raw.split(",") if cid.strip()]
+
+for cid in chat_ids:
+    try:
+        await context.bot.send_message(chat_id=int(cid), text=text)
+    except Exception as e:
+        print(f"Lỗi gửi tới {cid}: {e}")
+
+return
+
 
     # ======= LOGIC 16H00 =======
     if check_time == "16":
@@ -242,8 +250,14 @@ async def send_daily_summary(context: ContextTypes.DEFAULT_TYPE, check_time: str
             lines.append("\n👤 CC anh @nghinm")
             text = "\n".join(lines)
 
-        summary_chat_id = int(os.environ["SUMMARY_CHAT_ID"])
-        await context.bot.send_message(chat_id=summary_chat_id, text=text)
+chat_ids_raw = os.environ.get("SUMMARY_CHAT_ID", "")
+chat_ids = [cid.strip() for cid in chat_ids_raw.split(",") if cid.strip()]
+
+for cid in chat_ids:
+    try:
+        await context.bot.send_message(chat_id=int(cid), text=text)
+    except Exception as e:
+        print(f"Lỗi gửi tới {cid}: {e}")
 
 # ================== JOB 15H VÀ 16H =====================
 async def daily_summary_15(context: ContextTypes.DEFAULT_TYPE):
