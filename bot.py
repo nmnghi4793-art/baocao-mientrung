@@ -176,109 +176,52 @@ async def report_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def send_daily_summary(context: ContextTypes.DEFAULT_TYPE, check_time: str):
+# ================== LỆNH /report =====================
+async def report_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    check_time = "15" hoặc "16"
-    - 15h00: luôn gửi tổng kết.
-    - 16h00: chỉ gửi nếu 15h00 còn thiếu kho.
-    Nội dung:
-    1. Số kho đã báo cáo: X/Y
-    2. Các kho chưa báo cáo
-    + Dòng CC a @nghinm
+    Lệnh /report:
+    Tổng kết số kho đã báo cáo và chưa báo cáo trong ngày hôm nay.
+    Gửi sang SUMMARY_CHAT_ID và reply lại group đang gọi lệnh.
     """
-    global summary_15_done, last_summary_date
 
     now = datetime.now(TIMEZONE)
-    today = now.date()
-    today_key = today.isoformat()
-    date_label = today.strftime("%d/%m/%Y")
+    today_key = now.date().isoformat()
+    date_label = now.strftime("%d/%m/%Y")
 
-    # Nếu sang ngày mới thì reset trạng thái 15h
-    if last_summary_date != today_key:
-        summary_15_done = False
-        last_summary_date = today_key
+    all_ids = set(WAREHOUSES.keys())
+    done_ids = reported_by_date.get(today_key, set())
+    missing_ids = sorted(all_ids - done_ids)
 
-    # Danh sách tất cả kho
-    all_ids = sorted(WAREHOUSES.keys())
-    total_kho = len(all_ids)
+    # 1. số kho đã báo cáo
+    total = len(all_ids)
+    done = len(done_ids)
+    miss = len(missing_ids)
 
-    # Những kho đã báo cáo trong ngày
-    reported_ids = reported_by_date.get(today_key, set())
-    num_reported = len(reported_ids)
+    lines = [
+        f"📊 **Tổng kết ngày {date_label}:**",
+        f"1️⃣ Số kho đã báo cáo: {done}/{total} kho",
+        f"2️⃣ Các kho chưa báo cáo ({miss} kho):"
+    ]
 
-    # Những kho chưa báo cáo
-    missing_ids = [kid for kid in all_ids if kid not in reported_ids]
-    num_missing = len(missing_ids)
+    if miss == 0:
+        lines.append("✔️ Tất cả các kho đã gửi báo cáo.")
+    else:
+        for id_kho in missing_ids:
+            ten = WAREHOUSES.get(id_kho, "")
+            lines.append(f"- {id_kho} - {ten}")
 
-    # ======= LOGIC 15H00 =======
-    if check_time == "15":
-        summary_15_done = (num_missing == 0)  # nếu hết thiếu thì đánh dấu đủ
+    # Thêm CC anh Nghị
+    lines.append("\n👤 CC anh @nghinm để nắm thông tin.")
 
-        lines = []
-        lines.append(f"Tổng kết ngày {date_label}:")
-        lines.append(f"1. Số kho đã báo cáo: {num_reported}/{total_kho} kho")
+    text = "\n".join(lines)
 
-        if num_missing == 0:
-            lines.append("2. Các kho chưa báo cáo: Không, tất cả kho đã báo cáo.")
-        else:
-            lines.append(f"2. Các kho chưa báo cáo ({num_missing} kho):")
-            for kid in missing_ids:
-                ten_kho = WAREHOUSES.get(kid, "")
-                lines.append(f"- {kid} - {ten_kho}")
+    # Gửi vào group tổng hợp
+    summary_chat_id = int(os.environ["SUMMARY_CHAT_ID"])
+    await context.bot.send_message(chat_id=summary_chat_id, text=text)
 
-        # 👉 Thêm dòng CC
-        lines.append("")
-        lines.append("CC a @nghinm vào nắm thông tin")
-
-        text = "\n".join(lines)
-
-        summary_chat_id_raw = os.environ.get("SUMMARY_CHAT_ID", "")
-        chat_ids = [cid.strip() for cid in summary_chat_id_raw.split(",") if cid.strip()]
-
-        for cid in chat_ids:
-            try:
-                await context.bot.send_message(chat_id=int(cid), text=text)
-            except Exception as e:
-                print(f"Lỗi gửi tới {cid}: {e}")
-        return
-
-    # ======= LOGIC 16H00 =======
-    if check_time == "16":
-        # Nếu 15h tất cả đã đủ thì thôi, không gửi nữa
-        if summary_15_done:
-            return
-
-        lines = []
-        lines.append(f"Tổng kết lại lúc 16h00 ngày {date_label}:")
-        lines.append(f"1. Số kho đã báo cáo: {num_reported}/{total_kho} kho")
-
-        if num_missing == 0:
-            lines.append("2. Các kho chưa báo cáo: Không, tất cả kho đã báo cáo.")
-        else:
-            lines.append(f"2. Các kho chưa báo cáo ({num_missing} kho):")
-            for kid in missing_ids:
-                ten_kho = WAREHOUSES.get(kid, "")
-                lines.append(f"- {kid} - {ten_kho}")
-
-        # 👉 Thêm dòng CC
-        lines.append("")
-        lines.append("CC a @nghinm vào nắm thông tin")
-
-        text = "\n".join(lines)
-
-        summary_chat_id_raw = os.environ.get("SUMMARY_CHAT_ID", "")
-        chat_ids = [cid.strip() for cid in summary_chat_id_raw.split(",") if cid.strip()]
-
-        for cid in chat_ids:
-            try:
-                await context.bot.send_message(chat_id=int(cid), text=text)
-            except Exception as e:
-                print(f"Lỗi gửi tới {cid}: {e}")
-                
-
-    # Báo lại ở group đang gõ lệnh cho dễ biết
+    # Gửi lại group hiện tại để báo đã gửi
     if update.message:
-        await update.message.reply_text("✅ Đã gửi tổng kết vào các group cấu hình.")
+        await update.message.reply_text("✅ Đã gửi tổng hợp vào group tổng hợp.")
 
 
 def main():
