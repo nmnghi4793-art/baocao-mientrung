@@ -253,6 +253,42 @@ async def daily_summary_15(context: ContextTypes.DEFAULT_TYPE):
 async def daily_summary_16(context: ContextTypes.DEFAULT_TYPE):
     await send_daily_summary(context, check_time="16")
 
+async def report_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Lệnh /report -> tổng kết số kho đã báo cáo và chưa báo cáo."""
+    now = datetime.now(TIMEZONE)
+    today = now.date()
+    today_key = today.isoformat()
+    date_label = today.strftime("%d/%m/%Y")
+
+    # Tất cả kho trong file
+    all_ids = sorted(WAREHOUSES.keys())
+    total_kho = len(all_ids)
+
+    # Kho đã báo cáo
+    reported_ids = reported_by_date.get(today_key, set())
+    num_reported = len(reported_ids)
+
+    # Kho chưa báo cáo
+    missing_ids = [kid for kid in all_ids if kid not in reported_ids]
+    num_missing = len(missing_ids)
+
+    lines = []
+    lines.append(f"Tổng kết ngày {date_label}:")
+    lines.append(f"1. Số kho đã báo cáo: {num_reported}/{total_kho} kho")
+
+    # Liệt kê kho chưa báo cáo
+    if num_missing == 0:
+        lines.append("2. Các kho chưa báo cáo: Không, tất cả kho đã báo cáo.")
+    else:
+        lines.append(f"2. Các kho chưa báo cáo ({num_missing} kho):")
+        for kid in missing_ids:
+            ten_kho = WAREHOUSES.get(kid, "")
+            lines.append(f"- {kid} - {ten_kho}")
+
+    text = "\n".join(lines)
+
+    await update.message.reply_text(text)
+
 
 def main():
     global WAREHOUSES
@@ -266,6 +302,8 @@ def main():
 
     # Lệnh /start
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("report", report_status))
+
 
     # Nhận mọi tin nhắn text (không phải command) -> check báo cáo
     application.add_handler(
