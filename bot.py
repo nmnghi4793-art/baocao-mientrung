@@ -228,36 +228,39 @@ for cid in chat_ids:
 return
 
 
-        # ======= LOGIC 16H00 =======
-        if check_time == "16":
-            # Nếu 15h đã đủ thì thôi
-            if summary_15_done:
-                return
-    
-            if not missing_ids:
-                text = (
-                    f"Tổng kết ngày {date_label} : "
-                    f"Tất cả các kho đã gửi báo cáo trong ngày.\n"
-                    f"👤 CC anh @nghinm"
-                )
-            else:
-                lines = [
-                    f"Tổng kết ngày {date_label}: còn {len(missing_ids)} kho chưa gửi báo cáo:",
-                ]
-                for id_kho in missing_ids:
-                    ten = WAREHOUSES.get(id_kho, "")
-                    lines.append(f"- {id_kho} - {ten}")
-                lines.append("\n👤 CC anh @nghinm")
-                text = "\n".join(lines)
-    
-    chat_ids_raw = os.environ.get("SUMMARY_CHAT_ID", "")
-    chat_ids = [cid.strip() for cid in chat_ids_raw.split(",") if cid.strip()]
-    
-    for cid in chat_ids:
-        try:
-            await context.bot.send_message(chat_id=int(cid), text=text)
-        except Exception as e:
-            print(f"Lỗi gửi tới {cid}: {e}")
+            # ======= LOGIC 16H00 =======
+    if check_time == "16":
+        # Nếu 15h đã đủ thì thôi
+        if summary_15_done:
+            return
+
+        if not missing_ids:
+            text = (
+                f"Tổng kết ngày {date_label}: \n"
+                f"Tất cả các kho đã gửi báo cáo trong ngày.\n"
+                f"👤 CC anh @nghinm"
+            )
+        else:
+            lines = [
+                f"Tổng kết ngày {date_label}: còn {len(missing_ids)} kho chưa gửi báo cáo:",
+            ]
+            for id_kho in missing_ids:
+                ten = WAREHOUSES.get(id_kho, "")
+                lines.append(f"- {id_kho} - {ten}")
+            lines.append("\n👤 CC anh @nghinm")
+            text = "\n".join(lines)
+
+        chat_ids_raw = os.environ.get("SUMMARY_CHAT_ID", "")
+        chat_ids = [cid.strip() for cid in chat_ids_raw.split(",") if cid.strip()]
+
+        for cid in chat_ids:
+            try:
+                await context.bot.send_message(chat_id=int(cid), text=text)
+            except Exception as e:
+                print(f"Lỗi gửi tới {cid}: {e}")
+
+        return
+
 
 # ================== JOB 15H VÀ 16H =====================
 async def daily_summary_15(context: ContextTypes.DEFAULT_TYPE):
