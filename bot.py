@@ -276,7 +276,6 @@ async def report_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines.append(f"Tổng kết ngày {date_label}:")
     lines.append(f"1. Số kho đã báo cáo: {num_reported}/{total_kho} kho")
 
-    # Liệt kê kho chưa báo cáo
     if num_missing == 0:
         lines.append("2. Các kho chưa báo cáo: Không, tất cả kho đã báo cáo.")
     else:
@@ -287,13 +286,14 @@ async def report_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = "\n".join(lines)
 
-# Gửi sang group tổng hợp (SUMMARY_CHAT_ID)
-summary_chat_id = int(os.environ["SUMMARY_CHAT_ID"])
-await context.bot.send_message(chat_id=summary_chat_id, text=text)
+    # Gửi sang group tổng hợp (SUMMARY_CHAT_ID)
+    summary_chat_id = int(os.environ["SUMMARY_CHAT_ID"])
+    await context.bot.send_message(chat_id=summary_chat_id, text=text)
 
-# (Tuỳ chọn) báo lại ở group đang gõ lệnh cho dễ biết
-if update.message:
-    await update.message.reply_text("✅ Đã gửi tổng kết vào group tổng hợp.")
+    # (Tuỳ chọn) báo lại ở group đang gõ lệnh cho dễ biết
+    if update.message:
+        await update.message.reply_text("✅ Đã gửi tổng kết vào group tổng hợp.")
+
 
 
 def main():
