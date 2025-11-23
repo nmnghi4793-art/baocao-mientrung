@@ -178,8 +178,6 @@ async def report_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def send_daily_summary(context: ContextTypes.DEFAULT_TYPE, check_time: str):
     """
     check_time = "15" hoặc "16"
-    - 15h00: luôn gửi tổng kết.
-    - 16h00: chỉ gửi nếu 15h00 còn thiếu kho.
     """
     global summary_15_done, last_summary_date
 
@@ -187,7 +185,7 @@ async def send_daily_summary(context: ContextTypes.DEFAULT_TYPE, check_time: str
     today_key = now.date().isoformat()
     date_label = now.strftime("%d/%m/%Y")
 
-    # Nếu sang ngày mới thì reset trạng thái 15h
+    # Reset khi sang ngày mới
     if last_summary_date != today_key:
         summary_15_done = False
         last_summary_date = today_key
@@ -196,15 +194,14 @@ async def send_daily_summary(context: ContextTypes.DEFAULT_TYPE, check_time: str
     done_ids = reported_by_date.get(today_key, set())
     missing_ids = sorted(all_ids - done_ids)
 
-    # ======= LOGIC 15H00 =======
+    # ================== 15h00 ==================
     if check_time == "15":
         if not missing_ids:
-            summary_15_done = True  # Đã đủ, 16h không cần gửi
-            text = (
-                f"Tổng kết ngày {date_label} : "
-                f"Tất cả các kho đã gửi báo cáo trong ngày.\n"
-                f"👤 CC anh @nghinm"
-            )
+            summary_15_done = True
+            lines = [
+                f"Tổng kết ngày {date_label}: tất cả kho đã gửi báo cáo.",
+                "👤 CC anh @nghinm"
+            ]
         else:
             summary_15_done = False
             lines = [
@@ -213,19 +210,47 @@ async def send_daily_summary(context: ContextTypes.DEFAULT_TYPE, check_time: str
             for id_kho in missing_ids:
                 ten = WAREHOUSES.get(id_kho, "")
                 lines.append(f"- {id_kho} - {ten}")
-            lines.append("\n👤 CC anh @nghinm")
-            text = "\n".join(lines)
 
-chat_ids_raw = os.environ.get("SUMMARY_CHAT_ID", "")
-chat_ids = [cid.strip() for cid in chat_ids_raw.split(",") if cid.strip()]
+            lines.append("👤 CC anh @nghinm")
 
-for cid in chat_ids:
-    try:
-        await context.bot.send_message(chat_id=int(cid), text=text)
-    except Exception as e:
-        print(f"Lỗi gửi tới {cid}: {e}")
+        text = "\n".join(lines)
+        chat_ids = os.environ["SUMMARY_CHAT_ID"].split(",")
 
-return
+        for cid in chat_ids:
+            cid = cid.strip()
+            if cid:
+                await context.bot.send_message(chat_id=int(cid), text=text)
+        return
+
+    # ================== 16h00 ==================
+    if check_time == "16":
+        if summary_15_done:
+            return  # 15h đã đầy đủ → không gởi lại 16h
+
+        if not missing_ids:
+            lines = [
+                f"Tổng kết ngày {date_label}: tất cả kho đã gửi báo cáo.",
+                "👤 CC anh @nghinm"
+            ]
+        else:
+            lines = [
+                f"Tổng kết ngày {date_label}: còn {len(missing_ids)} kho chưa gửi báo cáo:",
+            ]
+            for id_kho in missing_ids:
+                ten = WAREHOUSES.get(id_kho, "")
+                lines.append(f"- {id_kho} - {ten}")
+
+            lines.append("👤 CC anh @nghinm")
+
+        text = "\n".join(lines)
+        chat_ids = os.environ["SUMMARY_CHAT_ID"].split(",")
+
+        for cid in chat_ids:
+            cid = cid.strip()
+            if cid:
+                await context.bot.send_message(chat_id=int(cid), text=text)
+        return
+
 
 
     # ======== LOGIC 16H00 ========
