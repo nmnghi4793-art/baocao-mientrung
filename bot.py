@@ -339,15 +339,22 @@ async def report_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Thêm CC anh Nghị
     lines.append("\n👤 CC anh @nghinm để nắm thông tin.")
 
-    text = "\n".join(lines)
+        text = "\n".join(lines)
 
-    # Gửi vào group tổng hợp
-    summary_chat_id = int(os.environ["SUMMARY_CHAT_ID"])
-    await context.bot.send_message(chat_id=summary_chat_id, text=text)
+    # Gửi vào (nhiều) group tổng hợp trong SUMMARY_CHAT_ID
+    chat_ids_raw = os.environ.get("SUMMARY_CHAT_ID", "")
+    chat_ids = [cid.strip() for cid in chat_ids_raw.split(",") if cid.strip()]
+
+    for cid in chat_ids:
+        try:
+            await context.bot.send_message(chat_id=int(cid), text=text)
+        except Exception as e:
+            print(f"Lỗi gửi report tới {cid}: {e}")
 
     # Gửi lại group hiện tại để báo đã gửi
     if update.message:
         await update.message.reply_text("✅ Đã gửi tổng hợp vào group tổng hợp.")
+
 
 
 def main():
