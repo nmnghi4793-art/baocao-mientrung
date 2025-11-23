@@ -339,7 +339,7 @@ async def report_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Thêm CC anh Nghị
     lines.append("\n👤 CC anh @nghinm để nắm thông tin.")
 
-        text = "\n".join(lines)
+    text = "\n".join(lines)
 
     # Gửi vào (nhiều) group tổng hợp trong SUMMARY_CHAT_ID
     chat_ids_raw = os.environ.get("SUMMARY_CHAT_ID", "")
