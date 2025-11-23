@@ -272,6 +272,7 @@ async def report_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     missing_ids = [kid for kid in all_ids if kid not in reported_ids]
     num_missing = len(missing_ids)
 
+    # Ghép nội dung báo cáo
     lines = []
     lines.append(f"Tổng kết ngày {date_label}:")
     lines.append(f"1. Số kho đã báo cáo: {num_reported}/{total_kho} kho")
@@ -286,21 +287,19 @@ async def report_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = "\n".join(lines)
 
-# Gửi vào nhiều group (SUMMARY_CHAT_ID = id1,id2,id3)
-chat_ids = os.environ["SUMMARY_CHAT_ID"].split(",")
+    # Gửi vào nhiều group (SUMMARY_CHAT_ID = id1,id2,id3)
+    chat_ids_raw = os.environ.get("SUMMARY_CHAT_ID", "")
+    chat_ids = [cid.strip() for cid in chat_ids_raw.split(",") if cid.strip()]
 
-for cid in chat_ids:
-    cid = cid.strip()
-    if not cid:
-        continue
-    try:
-        await context.bot.send_message(chat_id=int(cid), text=text)
-    except Exception as e:
-        print(f"Lỗi gửi tới {cid}: {e}")
+    for cid in chat_ids:
+        try:
+            await context.bot.send_message(chat_id=int(cid), text=text)
+        except Exception as e:
+            print(f"Lỗi gửi tới {cid}: {e}")
 
-# Báo lại tại group đang gõ lệnh
-if update.message:
-    await update.message.reply_text("✅ Đã gửi tổng kết vào các group cấu hình.")
+    # Báo lại ở group đang gõ lệnh cho dễ biết
+    if update.message:
+        await update.message.reply_text("✅ Đã gửi tổng kết vào các group cấu hình.")
 
 
 def main():
