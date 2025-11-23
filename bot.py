@@ -228,7 +228,7 @@ for cid in chat_ids:
 return
 
 
-            # ======= LOGIC 16H00 =======
+    # ======== LOGIC 16H00 ========
     if check_time == "16":
         # Nếu 15h đã đủ thì thôi
         if summary_15_done:
@@ -236,7 +236,7 @@ return
 
         if not missing_ids:
             text = (
-                f"Tổng kết ngày {date_label}: \n"
+                f"Tổng kết ngày {date_label}: "
                 f"Tất cả các kho đã gửi báo cáo trong ngày.\n"
                 f"👤 CC anh @nghinm"
             )
@@ -250,6 +250,7 @@ return
             lines.append("\n👤 CC anh @nghinm")
             text = "\n".join(lines)
 
+        # Gửi tới nhiều group
         chat_ids_raw = os.environ.get("SUMMARY_CHAT_ID", "")
         chat_ids = [cid.strip() for cid in chat_ids_raw.split(",") if cid.strip()]
 
@@ -260,6 +261,7 @@ return
                 print(f"Lỗi gửi tới {cid}: {e}")
 
         return
+
 
 
 # ================== JOB 15H VÀ 16H =====================
